@@ -1,0 +1,60 @@
+Option Explicit
+
+' --- 画面の再描画メイン処理 ---
+Public Sub UI_RefreshDisplay()
+    Dim wsQ As Worksheet: Set wsQ = Sheets("DB_Questions")
+    
+    Select Case CurrentPhase
+        Case Phase_NormalQ
+            ' DB_Questionsから現在の質問文を取得して描画
+            Dim r As Integer: r = CurrentQuestion + 1
+            Call UI_SetElements("第 " & CurrentQuestion & " 問", wsQ.Cells(r, 2).Value, _
+                       wsQ.Cells(r, 3).Value, wsQ.Cells(r, 9).Value, wsQ.Cells(r, 15).Value, wsQ.Cells(r, 21).Value)
+        
+        Case Phase_Trait
+            ' DB_Questionsの8行目（7問目）を取得して描画
+            Call UI_SetElements("特性の観測", wsQ.Cells(8, 2).Value, _
+                       wsQ.Cells(8, 3).Value, wsQ.Cells(8, 9).Value, wsQ.Cells(8, 15).Value, wsQ.Cells(8, 21).Value)
+        
+        Case Phase_Region
+            ' 地域モジュールに表示内容の決定を委譲
+            Call Region_UpdateDisplay
+    End Select
+End Sub
+
+' --- QUESTIONシートのシェイプ文字更新 ---
+Public Sub UI_SetElements(ti As String, qt As String, a As String, b As String, c As String, d As String)
+    Dim ws As Worksheet: Set ws = Sheets("QUESTION")
+    ws.Range("A2").Value = ti
+    ws.Shapes("txtQ").TextFrame.Characters.Text = qt
+    ws.Shapes("btnA").TextFrame.Characters.Text = a
+    ws.Shapes("btnB").TextFrame.Characters.Text = b
+    ws.Shapes("btnC").TextFrame.Characters.Text = c
+    ws.Shapes("btnD").TextFrame.Characters.Text = d
+    
+    ' 空文字の場合はボタンを見えなくする（クリック防止）
+    ws.Shapes("btnD").Visible = (d <> "")
+End Sub
+
+' --- RESULTシートへの最終出力 ---
+Public Sub UI_DisplayResult(ByRef w As Warlord)
+    Dim wsRes As Worksheet: Set wsRes = Sheets("RESULT")
+    
+    ' セルへの書き込み
+    wsRes.Range("C5").Value = w.Name
+    wsRes.Range("B5").Value = w.LDR ' 統率
+    wsRes.Range("C6").Value = w.VAL ' 武勇
+    wsRes.Range("D5").Value = w.INT ' 知略
+    wsRes.Range("E5").Value = w.POL ' 政治
+    wsRes.Range("C8").Value = w.TraitDescription ' 解説
+    
+    ' グラフ更新（同名の関数が存在する前提）
+    On Error Resume Next
+    Call UpdateRadarChart(w)
+    On Error GoTo 0
+    
+    ' 画面切り替えと完了メッセージ
+    wsRes.Activate
+    MsgBox "解析完了。あなたの魂に宿る武将が表示されました。", vbInformation, "ARCHIVE CHRONICLE"
+End Sub
+

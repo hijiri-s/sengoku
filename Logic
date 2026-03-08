@@ -1,0 +1,114 @@
+Option Explicit
+
+' --- スコア加算 (DB_Questions連携) ---
+Public Sub Logic_AddScore(choice As String)
+    Dim wsQ As Worksheet: Set wsQ = Sheets("DB_Questions")
+    Dim wsIn As Worksheet: Set wsIn = Sheets("QUESTION")
+    Dim cIdx As Integer: cIdx = InStr("ABCD", choice)
+    Dim r As Integer: r = CurrentQuestion + 1
+    Dim sc As Integer: sc = 3 + (cIdx - 1) * 6
+    
+    Dim i As Integer
+    For i = 1 To 4 ' LDR, VAL, INT, POLを加算
+        wsIn.Cells(i, 2).Value = VAL(wsIn.Cells(i, 2).Value) + wsQ.Cells(r, sc + i).Value
+    Next i
+End Sub
+
+' --- 特性保存 ---
+Public Sub Logic_SetTrait(choice As String)
+    Dim wsIn As Worksheet: Set wsIn = Sheets("QUESTION")
+    wsIn.Range("B5").Value = wsIn.Shapes("btn" & choice).TextFrame.Characters.Text
+End Sub
+
+' --- 最終集計と解析開始 (全DB連携の心臓部) ---
+Public Sub Logic_Finalize()
+    Dim UserPC As Warlord, ResW As Warlord
+    Dim wsIn As Worksheet: Set wsIn = Sheets("QUESTION")
+    Dim wsT As Worksheet: Set wsT = Sheets("DB_Traits")
+    
+    ' 1. QUESTIONシートからユーザーデータを回収
+    With UserPC
+        .LDR = VAL(wsIn.Range("B1").Value): .VAL = VAL(wsIn.Range("B2").Value)
+        .INT = VAL(wsIn.Range("B3").Value): .POL = VAL(wsIn.Range("B4").Value)
+        .Region = wsIn.Range("B6").Value
+    End With
+
+    ' 2. DB_Warlords & DB_Regions で最適な武将を算出
+    ResW = ExecuteMatching(UserPC)
+    Call Logic_FillWarlordData(ResW)
+    
+    ' 3. DB_Traits から解説文を取得
+    On Error Resume Next
+    ResW.TraitDescription = Application.WorksheetFunction.VLookup(ResW.Name, wsT.Range("A:B"), 2, False)
+    If Err.Number <> 0 Then ResW.TraitDescription = "未知なる可能性を秘めた魂です。"
+    On Error GoTo 0
+    
+    ' 4. LOGシートへ履歴を記録
+    Call Logic_WriteLog(UserPC, ResW)
+    
+    ' 5. RESULT画面へ出力
+    Call UI_DisplayResult(ResW)
+End Sub
+
+' --- マッチングアルゴリズム（小島貞興ループ完全解消版） ---
+Private Function ExecuteMatching(ByRef p As Warlord) As Warlord
+    Dim wsW As Worksheet: Set wsW = Sheets("DB_Warlords")
+    Dim wsR As Worksheet: Set wsR = Sheets("DB_Regions")
+    Dim i As Long, r As Long, c As Long
+    Dim bestIdx As Long: bestIdx = 2
+    Dim minDist As Double: minDist = 999999 ' 初期値を極大化し全武将を平等に評価
+    
+    ' ゆかりの地（県名等）がDB_Regionsの何行目にあるか探す
+    Dim uR As Long: uR = 0
+    For r = 2 To wsR.Cells(wsR.Rows.count, 1).End(xlUp).row
+        If wsR.Cells(r, 1).Value = p.Region Then uR = r: Exit For
+    Next r
+
+    ' 全武将をスキャン
+    For i = 2 To wsW.Cells(wsW.Rows.count, 1).End(xlUp).row
+        ' 能力値の差を二乗して計算（より近い能力の武将が際立つように調整）
+        Dim diff As Double
+        diff = (p.LDR - wsW.Cells(i, 2).Value) ^ 2 + _
+               (p.VAL - wsW.Cells(i, 3).Value) ^ 2 + _
+               (p.INT - wsW.Cells(i, 4).Value) ^ 2 + _
+               (p.POL - wsW.Cells(i, 5).Value) ^ 2
+        
+        ' DB_Regionsに基づく地域ボーナス判定
+        Dim wReg As String: wReg = Trim(wsW.Cells(i, 6).Value)
+        If uR > 0 And wReg <> "" Then
+            For c = 2 To 28 ' B列以降に親和性のある地域名が入っている想定
+                If wsR.Cells(uR, c).Value = wReg Then
+                    diff = diff * 0.3 ' 地域が一致または近い場合、距離(diff)を大幅に縮める
+                    Exit For
+                End If
+            Next c
+        End If
+
+        ' 最小距離の更新
+        If diff < minDist Then
+            minDist = diff
+            bestIdx = i
+        End If
+    Next i
+    
+    ExecuteMatching.Name = wsW.Cells(bestIdx, 1).Value
+End Function
+
+Private Sub Logic_FillWarlordData(ByRef w As Warlord)
+    Dim wsW As Worksheet: Set wsW = Sheets("DB_Warlords")
+    Dim r As Variant: r = Application.Match(w.Name, wsW.Range("A:A"), 0)
+    If Not IsError(r) Then
+        w.LDR = wsW.Cells(r, 2).Value: w.VAL = wsW.Cells(r, 3).Value
+        w.INT = wsW.Cells(r, 4).Value: w.POL = wsW.Cells(r, 5).Value
+    End If
+End Sub
+
+Private Sub Logic_WriteLog(u As Warlord, w As Warlord)
+    Dim wsL As Worksheet: Set wsL = Sheets("LOG")
+    Dim nR As Long: nR = wsL.Cells(wsL.Rows.count, 1).End(xlUp).row + 1
+    wsL.Cells(nR, 1).Value = Now
+    wsL.Cells(nR, 2).Value = u.Region
+    wsL.Cells(nR, 3).Value = w.Name
+    wsL.Cells(nR, 4).Value = "L" & u.LDR & "/V" & u.VAL & "/I" & u.INT & "/P" & u.POL
+End Sub
+

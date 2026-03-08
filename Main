@@ -1,0 +1,85 @@
+Option Explicit
+
+' --- 共有構造体 ---
+Public Type Warlord
+    Name As String
+    LDR As Integer: VAL As Integer: INT As Integer: POL As Integer
+    Region As String: TraitDescription As String
+End Type
+
+' --- フェーズ定義 ---
+Public Enum AppPhase
+    Phase_NormalQ = 1   ' 1～6問目（通常質問）
+    Phase_Trait = 2     ' 7問目（特性選択）
+    Phase_Region = 3    ' 地域選択（ドリルダウン）
+End Enum
+
+' --- グローバル変数 ---
+Public CurrentPhase As AppPhase
+Public CurrentQuestion As Integer
+Public SelectedAreaGroup As String
+
+' ==========================================
+' システム開始・リセット
+' ==========================================
+Public Sub GoToQuestionSheet()
+    Sheets("QUESTION").Activate
+    CurrentPhase = Phase_NormalQ
+    CurrentQuestion = 1
+    SelectedAreaGroup = ""
+    
+    ' QUESTIONシートの保持データ(B1:B6)を初期化
+    Sheets("QUESTION").Range("B1:B6").Value = ""
+    
+    ' UIの初期描画
+    Call UI_RefreshDisplay
+End Sub
+
+Public Sub btnReset_Click()
+    If MsgBox("最初からやり直しますか？", vbQuestion + vbYesNo) = vbYes Then Call GoToQuestionSheet
+End Sub
+
+' ==========================================
+' ボタン入力受付（ここから各モジュールへ分岐）
+' ==========================================
+Public Sub btnA_Click(): Call HandleInput("A"): End Sub
+Public Sub btnB_Click(): Call HandleInput("B"): End Sub
+Public Sub btnC_Click(): Call HandleInput("C"): End Sub
+Public Sub btnD_Click(): Call HandleInput("D"): End Sub
+
+Private Sub HandleInput(choice As String)
+    Select Case CurrentPhase
+        Case Phase_NormalQ
+            Call Logic_AddScore(choice)
+            If CurrentQuestion < 6 Then
+                CurrentQuestion = CurrentQuestion + 1
+            Else
+                CurrentPhase = Phase_Trait
+            End If
+            
+        Case Phase_Trait
+            Call Logic_SetTrait(choice)
+            CurrentPhase = Phase_Region
+            SelectedAreaGroup = ""
+            
+        Case Phase_Region
+            Call Region_HandleInput(choice)
+    End Select
+    
+    ' 入力処理後、必ず画面を最新状態にする
+    Call UI_RefreshDisplay
+End Sub
+
+' 戻るボタンの特殊処理
+Public Sub btnBack_Click()
+    Select Case CurrentPhase
+        Case Phase_NormalQ
+            If CurrentQuestion > 1 Then CurrentQuestion = CurrentQuestion - 1
+        Case Phase_Trait
+            CurrentPhase = Phase_NormalQ
+            CurrentQuestion = 6
+        Case Phase_Region
+            Call Region_HandleBack
+    End Select
+    Call UI_RefreshDisplay
+End Sub

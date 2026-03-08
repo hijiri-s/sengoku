@@ -1,0 +1,63 @@
+Option Explicit
+
+' --- 地域選択時の入力処理 ---
+Public Sub Region_HandleInput(choice As String)
+    Dim wsIn As Worksheet: Set wsIn = Sheets("QUESTION")
+    
+    ' 階層0でのDボタンは「外国」確定
+    If choice = "D" And Len(SelectedAreaGroup) = 0 Then
+        wsIn.Range("B6").Value = "外国"
+        Call Logic_Finalize
+        Exit Sub
+    End If
+    
+    ' 階層1以上でのDボタンは「戻る」に流す
+    If choice = "D" Then
+        Call Region_HandleBack
+        Exit Sub
+    End If
+    
+    ' 選択を記録して階層を進める
+    SelectedAreaGroup = SelectedAreaGroup & choice
+    
+    ' 階層2（県レベル）に達したら確定処理へ
+    If Len(SelectedAreaGroup) = 2 Then
+        wsIn.Range("B6").Value = wsIn.Shapes("btn" & choice).TextFrame.Characters.Text
+        Call Logic_Finalize
+    End If
+End Sub
+
+' --- 戻る処理 ---
+Public Sub Region_HandleBack()
+    If Len(SelectedAreaGroup) > 0 Then
+        ' 階層を1つ削る
+        SelectedAreaGroup = Left(SelectedAreaGroup, Len(SelectedAreaGroup) - 1)
+    Else
+        ' 階層0なら特性選択フェーズに戻る
+        CurrentPhase = Phase_Trait
+    End If
+End Sub
+
+' --- 現在の階層に応じた表示内容をUIモジュールへ渡す ---
+Public Sub Region_UpdateDisplay()
+    Select Case Len(SelectedAreaGroup)
+        Case 0 ' Step 1: 広域エリア
+            Call UI_SetElements("出自の観測", "あなたのルーツはどのあたりですか？", _
+                                "北・東日本", "中日本(関東～東海)", "西・南日本", "外国・その他")
+            
+        Case 1 ' Step 2: 地方
+            Select Case SelectedAreaGroup
+                Case "A": Call UI_SetElements("地方選択", "より詳しく...", "北海道・東北", "北信越", "その他", "戻る")
+                Case "B": Call UI_SetElements("地方選択", "より詳しく...", "関東", "甲信", "東海", "戻る")
+                Case "C": Call UI_SetElements("地方選択", "より詳しく...", "近畿", "中国・四国", "九州・沖縄", "戻る")
+            End Select
+            
+        Case 2 ' Step 3: 県確定 (※ここでボタンに設定した文字が最終的な「ゆかりの地」になります)
+            Select Case SelectedAreaGroup
+                Case "BA": Call UI_SetElements("県選択", "ゆかりの地", "東京都", "神奈川県", "埼玉県/他", "戻る")
+                Case "BC": Call UI_SetElements("県選択", "ゆかりの地", "愛知県", "岐阜県", "三重県", "戻る")
+                Case Else: Call UI_SetElements("県選択", "エリア確定", "この地域", "戻る", "", "")
+            End Select
+    End Select
+End Sub
+
